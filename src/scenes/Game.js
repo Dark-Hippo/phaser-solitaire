@@ -1,11 +1,47 @@
 import { Scene } from 'phaser';
 import { GameOver } from './GameOver';
 
-
 const PEG_SIZE = 60;
 const PEG_FRAME_EMPTY = 0;
 const PEG_FRAME_FULL = 1;
 const PEG_FRAME_SELECTED = 2;
+
+function LocalScaleManager() {
+}
+
+LocalScaleManager.prototype = {
+    scaleSprite: function (sprite, availableSpaceWidth, availableSpaceHeight, padding, scaleMultiplier, isFullScale) {
+        let scale = this.getSpriteScale(sprite.frame.width, sprite.frame.height, availableSpaceWidth, availableSpaceHeight, padding, isFullScale);
+        sprite.setScale(scale * scaleMultiplier);
+        return scale;
+    },
+    scaleSpriteTo: function (sprite, scale) {
+        sprite.setScale(scale);
+    },
+    scaleText: function (sprite, availableSpaceWidth, availableSpaceHeight, padding, scaleMultiplier, isFullScale) {
+        let originalWidth = sprite.width;
+        let originalHeight = sprite.height;
+        let scale = this.getSpriteScale(originalWidth, originalHeight, availableSpaceWidth, availableSpaceHeight, padding, isFullScale);
+        sprite.setScale(scale * scaleMultiplier);
+    },
+    getSpriteScale: function (spriteWidth, spriteHeight, availableSpaceWidth, availableSpaceHeight, minPadding, isFullScale) {
+        let ratio = 1;
+        let currentDevicePixelRatio = window.devicePixelRatio;
+        // Sprite needs to fit in either width or height
+        let widthRatio = (spriteWidth * currentDevicePixelRatio + 2 * minPadding) / availableSpaceWidth;
+        let heightRatio = (spriteHeight * currentDevicePixelRatio + 2 * minPadding) / availableSpaceHeight;
+        if (widthRatio > 1 || heightRatio > 1) {
+            ratio = 1 / Math.max(widthRatio, heightRatio);
+        } else {
+            if (isFullScale)
+                ratio = 1 / Math.max(widthRatio, heightRatio);
+        }
+        return ratio * currentDevicePixelRatio;
+    }
+};
+
+let localScaleManager = new LocalScaleManager;
+
 export class Game extends Scene
 {
 
@@ -18,8 +54,7 @@ export class Game extends Scene
         this.load.spritesheet('pegs', 'assets/pegs.png', { frameWidth: PEG_SIZE, frameHeight: PEG_SIZE });
     }
 
-    create ()
-    {
+    create() {
         this.boardDef = [
             [-1, -1, 1, 1, 1, -1, -1],
             [-1, -1, 1, 1, 1, -1, -1],
@@ -30,23 +65,27 @@ export class Game extends Scene
             [-1, -1, 1, 1, 1, -1, -1]
         ];
 
+        //  If a Game Object is clicked on, this event is fired.
+        //  We can use it to emit the 'clicked' event on the game object itself.
         this.input.on('gameobjectup', function (pointer, gameObject) {
             gameObject.emit('clicked', gameObject);
         }, this);
 
+        // add our sprites
         this.board = [];
         this.selectedPeg = null;
         this.movesCount = 0;
+        this.isMoving = false;
 
-        for (let i = 0, length = this.boardDef.length; i < length; i++) {
+        for (let i = 0, len = this.boardDef.length; i < len; i++) {
             let r = this.boardDef[i];
             let row = [];
             this.board.push(row);
-            for (let j = 0, count = r.length; j < count; j++) {
+            for (let j = 0, cnt = r.length; j < cnt; j++) {
                 let c = r[j];
                 if (c >= 0) {
-                    let cell = this.add.image((i * PEG_SIZE) + (PEG_SIZE / 2), (j * PEG_SIZE) + (PEG_SIZE / 2), "pegs");
-                    cell.setFrame(c > 0 ? PEG_FRAME_FULL : PEG_FRAME_EMPTY);
+                    let cell = this.add.image(-900, -900, "pegs");
+                    cell.setFrame(c > 0 ? 1 : 0);
                     cell.setOrigin(0);
 
                     // enable input events
@@ -54,101 +93,62 @@ export class Game extends Scene
                     cell.on('clicked', this.clickPeg, this);
                     cell.gridX = i;
                     cell.gridY = j;
-
                     row.push(cell);
                 } else {
                     row.push(null);
                 }
             }
         }
+        this.movesLabel = this.add.text(-900, -900, 'Moves: ' + this.movesCount, { fontFamily: "Arial Black", fontSize: 40, color: "#fff" });
+        this.movesLabel.setShadow(2, 2, 'rgba(0, 0, 0, 0.5)', 2);
 
-        this.movesLabel = this.add.text(0, 0, 'Moves: ' + this.movesCount, { font: '24px Courier', fill: '#000000' });
-
-        this.tempPeg = this.add.sprite(-200, -200, 'pegs');
-        this.tempPeg.setFrame(PEG_FRAME_FULL);
+        this.tempPeg = this.add.sprite(-200, -200, "pegs");
+        this.tempPeg.setFrame(1);
         this.tempPeg.setOrigin(0);
+
+        var gameWidth = this.cameras.main.width;
+        var gameHeight = this.cameras.main.height;
+        this.positionControls(gameWidth, gameHeight);
     }
 
-    clickPeg(peg) {
+    positionControls(width, height) {
+        // 7 pegs + leave space equivalent for 1 peg on each side
+        var pegSize = Math.min(width / 9, height / 9);
+        var pegScale = localScaleManager.scaleSprite(this.tempPeg, pegSize, pegSize, 0, 1, true);
+        var horizontalMargin = (width - 7 * pegSize) / 2;
+        var verticalMargin = (height - 7 * pegSize) / 2;
 
-        // if an empty peg has been clicked on
-        if(peg.frame.name === PEG_FRAME_EMPTY) {
-            
-            // if we have not selected a peg to jump then no need to move any further
-            if(!this.selectedPeg) {
-                return;
-            }
-
-            let clickedX = peg.gridX;
-            let clickedY = peg.gridY;
-            let selectedX = this.selectedPeg.gridX;
-            let selectedY = this.selectedPeg.gridY;
-
-            // check to see if a horizontal jump of 2 squares
-            if((clickedX + 2 === selectedX || clickedX - 2 === selectedX) && clickedY === selectedY)    {
-                // move horizontally
-
-                // peg to remove is the peg between the selected peg and the clicked empty peg
-                let pegToRemove = this.board[(selectedX + clickedX) / 2][clickedY];
-
-                // if the peg to remove is empty then no need to move any further
-                if(pegToRemove.frame.name === PEG_FRAME_EMPTY) {
-                    return;
+        let colsCount = this.board.length;
+        for (let i = 0; i < colsCount; i++) {
+            let col = this.board[i];
+            for (let j = 0, cnt = col.length; j < cnt; j++) {
+                let c = col[j];
+                if (c) {
+                    localScaleManager.scaleSpriteTo(c, pegScale);
+                    c.setPosition(horizontalMargin + i * pegSize, verticalMargin + j * pegSize);
                 }
-
-                this.updateMoves(++this.movesCount);
-                this.removePeg(this.tempPeg, this.selectedPeg, peg, pegToRemove);
-                this.selectedPeg.setFrame(PEG_FRAME_EMPTY);
-                this.selectedPeg = null;
-
-            } else if((clickedY + 2 === selectedY || clickedY - 2 === selectedY) && clickedX === selectedX) {
-                // move vertically
-
-                // peg to remove is the peg between the selected peg and the clicked empty peg
-                let pegToRemove = this.board[clickedX][(selectedY + clickedY) / 2];
-
-                // if the peg to remove is empty then no need to move any further
-                if(pegToRemove.frame.name === PEG_FRAME_EMPTY) {
-                    return;
-                }
-
-                this.updateMoves(++this.movesCount);
-                this.removePeg(this.tempPeg, this.selectedPeg, peg, pegToRemove);
-                this.selectedPeg.setFrame(PEG_FRAME_EMPTY);
-                this.selectedPeg = null;
-            }
-        } else {    // a peg has been clicked on
-            if (this.selectedPeg) { // if a peg has already been selected
-                if (peg === this.selectedPeg) { // if the same peg has been clicked on again, unselect it
-                    peg.setFrame(PEG_FRAME_FULL);
-                    this.selectedPeg = null;
-                } else { // if a different peg has been clicked on, unselect the previous one and select the new one
-                    this.selectedPeg.setFrame(PEG_FRAME_FULL);
-                    this.selectedPeg = peg;
-                    peg.setFrame(PEG_FRAME_SELECTED);
-                }
-            } else {    // if no peg has been selected yet, select the peg
-                this.selectedPeg = peg;
-                peg.setFrame(PEG_FRAME_SELECTED);
             }
         }
+
+        localScaleManager.scaleText(this.movesLabel, width, pegSize, Math.min(width, pegSize * 0.2), 1, true);
+        this.movesLabel.setPosition(width / 2 - this.movesLabel.displayWidth / 2, 0);
+        this.pegSize = pegSize;
     }
 
-    updateMoves(count) {
-        this.movesLabel.setText('Moves: ' + count);
-    }
-
-    checkGameOver() {
-        if (!this.isAnyValidMove()) {
-            this.gameOver();
-        }
+    updateMoves(movesCount) {
+        var width = this.cameras.main.width;
+        this.movesLabel.setText('Moves: ' + movesCount);
+        this.movesLabel.setPosition(width / 2 - this.movesLabel.displayWidth / 2, 0);
     }
 
     gameOver() {
-        this.registry.set('gamedata', {movesCount: this.movesCount, remainingPegs: this.remainingPegs()});
-        let gameOver = new GameOver();
-        this.scene.add('GameOver', gameOver, true);
-        this.scene.remove('Game');
+        this.registry.set('gamedata', { movesCount: this.movesCount, remainingPegs: this.remainingPegs() });
+        this.cameras.main.fade(500);
+        this.time.delayedCall(500, function () {
+            let gameOver = new GameOver('GameOver');
+            this.scene.add('GameOver', gameOver, true);
+            this.scene.remove('Game');
+        }, [], this)
     }
 
     isAnyValidMove() {
@@ -167,7 +167,7 @@ export class Game extends Scene
             }
         }
 
-        var rowsCount = this.board[0].length;
+        let rowsCount = this.board[0].length;
         for (let i = 0, len = colsCount - 3; i <= len; i++) {
             let r1 = this.board[i];
             let r2 = this.board[i + 1];
@@ -187,11 +187,11 @@ export class Game extends Scene
     }
 
     remainingPegs() {
-        var pegs = 0;
+        let pegs = 0;
         for (let i = 0, len = this.board.length; i < len; i++) {
-            let col = this.board[i];
-            for (let j = 0, cnt = col.length; j < cnt; j++) {
-                let cell = col[j];
+            let row = this.board[i];
+            for (let j = 0, cnt = row.length; j < cnt; j++) {
+                let cell = row[j];
                 if (cell && cell.frame.name !== 0) {
                     pegs++
                 }
@@ -200,12 +200,68 @@ export class Game extends Scene
         return pegs;
     }
 
+    clickPeg(peg) {
+        if (this.isMoving) return;
+
+        if (peg.frame.name === 0) {
+            // if we have not selected a peg to jump then no need to move any further
+            if (!this.selectedPeg)
+                return;
+
+            let clickedX = peg.gridX;
+            let clickedY = peg.gridY;
+            let selectedX = this.selectedPeg.gridX;
+            let selectedY = this.selectedPeg.gridY;
+
+            if ((clickedX + 2 === selectedX || clickedX - 2 === selectedX) && clickedY === selectedY) {
+                // move horizontal
+                let pegToRemove = this.board[(selectedX + clickedX) / 2][clickedY];
+                if (pegToRemove.frame.name === 0)
+                    return;
+
+                this.updateMoves(++this.movesCount);
+                this.removePeg(this.tempPeg, this.selectedPeg, peg, pegToRemove);
+
+                this.selectedPeg.setFrame(0);
+                this.selectedPeg = null;
+
+            } else if ((clickedY + 2 === selectedY || clickedY - 2 === selectedY) && clickedX === selectedX) {
+                // move vertical
+                let pegToRemove = this.board[clickedX][(selectedY + clickedY) / 2];
+                if (pegToRemove.frame.name === 0)
+                    return;
+
+                this.updateMoves(++this.movesCount);
+                this.removePeg(this.tempPeg, this.selectedPeg, peg, pegToRemove);
+
+                this.selectedPeg.setFrame(0);
+                this.selectedPeg = null;
+            }
+
+        } else {
+            if (this.selectedPeg) {
+                if (peg === this.selectedPeg) {
+                    peg.setFrame(1);
+                    this.selectedPeg = null;
+                } else {
+                    this.selectedPeg.setFrame(1);
+                    this.selectedPeg = peg;
+                    peg.setFrame(2);
+                }
+            } else {
+                this.selectedPeg = peg;
+                peg.setFrame(2);
+            }
+        }
+    }
+
     removePeg(tempPeg, selectedPeg, targetPeg, pegToRemove) {
         tempPeg.setPosition(selectedPeg.x, selectedPeg.y);
         tempPeg.targetPeg = targetPeg;
         tempPeg.removePeg = pegToRemove;
         tempPeg.visible = true;
         var self = this;
+        this.isMoving = true;
         this.pegTween = this.tweens.add({
             targets: tempPeg,
             x: targetPeg.x,
@@ -213,16 +269,18 @@ export class Game extends Scene
             duration: 200,
             delay: 50,
             onStart: function (tween) {
-                var sprite = tween.targets[0];
-                sprite.removePeg.setFrame(PEG_FRAME_EMPTY);
+                let sprite = tween.targets[0];
+                sprite.removePeg.setFrame(0);
             },
             onComplete: function (tween) {
-                var sprite = tween.targets[0];
-                sprite.targetPeg.setFrame(PEG_FRAME_FULL);
+                self.isMoving = false;
+                let sprite = tween.targets[0];
+                sprite.targetPeg.setFrame(1);
                 sprite.visible = false;
                 if (!self.isAnyValidMove()) {
+                    self.cameras.main.shake(2000, 0.005); // second parameter is just the shake intensity
                     let timedEvent = self.time.addEvent({
-                        delay: 3000,
+                        delay: 2000,
                         callbackScope: this,
                         callback: function () {
                             self.gameOver();
