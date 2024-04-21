@@ -214,11 +214,11 @@ export class Game extends Scene
             delay: 50,
             onStart: function (tween) {
                 var sprite = tween.targets[0];
-                sprite.removePeg.setFrame(0);
+                sprite.removePeg.setFrame(PEG_FRAME_EMPTY);
             },
             onComplete: function (tween) {
                 var sprite = tween.targets[0];
-                sprite.targetPeg.setFrame(1);
+                sprite.targetPeg.setFrame(PEG_FRAME_FULL);
                 sprite.visible = false;
                 if (!self.isAnyValidMove()) {
                     let timedEvent = self.time.addEvent({
