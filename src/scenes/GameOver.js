@@ -1,28 +1,37 @@
 import { Scene } from 'phaser';
 
-export class GameOver extends Scene
-{
-    constructor ()
-    {
-        super('GameOver');
+import { Game } from './Game';
+
+export class GameOver extends Scene {
+ 
+    constructor() {
+        super("GameOver");
     }
 
-    create ()
-    {
-        this.cameras.main.setBackgroundColor(0xff0000);
+    preload() {
+        this.load.image("restart", "assets/restart.png");
+    }
+ 
+    create() {
+        var gamedata = this.registry.get('gamedata');
+        const {movesCount, remainingPegs} = gamedata || {movesCount: 0, remainingPegs: 0};
 
-        this.add.image(512, 384, 'background').setAlpha(0.5);
+        this.add.text(140, 100, 'Game Over', { font: '42px Courier', fill: '#000000' });
+        this.add.text(155, 160, 'Moves: ' + movesCount, { font: '42px Courier', fill: '#000000' });
+        if (remainingPegs > 1) {
+            this.remainingPegs = this.add.text(30, 220, 'Remaining Pegs: ' + remainingPegs, { font: '42px Courier', fill: '#000000' });
+        }
+        var btn = this.add.image(140, 200, 'restart');
+        btn.setInteractive();
+        btn.setScale(0.5)
+        btn.setOrigin(0);
+        
+        btn.on('pointerup', this.startGame, this);
+    }
 
-        this.add.text(512, 384, 'Game Over', {
-            fontFamily: 'Arial Black', fontSize: 64, color: '#ffffff',
-            stroke: '#000000', strokeThickness: 8,
-            align: 'center'
-        }).setOrigin(0.5);
-
-        this.input.once('pointerdown', () => {
-
-            this.scene.start('MainMenu');
-
-        });
+    startGame() {
+        let theGame = new Game('TheGame');
+        this.scene.add('TheGame', theGame, true);
+        this.scene.remove('GameOver');
     }
 }
