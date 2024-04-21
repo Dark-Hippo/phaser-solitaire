@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { GameOver } from './GameOver';
 
 
 const PEG_SIZE = 60;
@@ -35,6 +36,7 @@ export class Game extends Scene
 
         this.board = [];
         this.selectedPeg = null;
+        this.movesCount = 0;
 
         for (let i = 0, length = this.boardDef.length; i < length; i++) {
             let r = this.boardDef[i];
@@ -59,6 +61,12 @@ export class Game extends Scene
                 }
             }
         }
+
+        this.movesLabel = this.add.text(0, 0, 'Moves: ' + this.movesCount, { font: '24px Courier', fill: '#000000' });
+
+        this.tempPeg = this.add.sprite(-200, -200, 'pegs');
+        this.tempPeg.setFrame(PEG_FRAME_FULL);
+        this.tempPeg.setOrigin(0);
     }
 
     clickPeg(peg) {
@@ -88,8 +96,8 @@ export class Game extends Scene
                     return;
                 }
 
-                pegToRemove.setFrame(PEG_FRAME_EMPTY);
-                peg.setFrame(PEG_FRAME_FULL);
+                this.updateMoves(++this.movesCount);
+                this.removePeg(this.tempPeg, this.selectedPeg, peg, pegToRemove);
                 this.selectedPeg.setFrame(PEG_FRAME_EMPTY);
                 this.selectedPeg = null;
 
@@ -104,8 +112,8 @@ export class Game extends Scene
                     return;
                 }
 
-                pegToRemove.setFrame(PEG_FRAME_EMPTY);
-                peg.setFrame(PEG_FRAME_FULL);
+                this.updateMoves(++this.movesCount);
+                this.removePeg(this.tempPeg, this.selectedPeg, peg, pegToRemove);
                 this.selectedPeg.setFrame(PEG_FRAME_EMPTY);
                 this.selectedPeg = null;
             }
@@ -124,5 +132,104 @@ export class Game extends Scene
                 peg.setFrame(PEG_FRAME_SELECTED);
             }
         }
+    }
+
+    updateMoves(count) {
+        this.movesLabel.setText('Moves: ' + count);
+    }
+
+    checkGameOver() {
+        if (!this.isAnyValidMove()) {
+            this.gameOver();
+        }
+    }
+
+    gameOver() {
+        this.registry.set('gamedata', {movesCount: this.movesCount, remainingPegs: this.remainingPegs()});
+        let gameOver = new GameOver();
+        this.scene.add('GameOver', gameOver, true);
+        this.scene.remove('Game');
+    }
+
+    isAnyValidMove() {
+        let colsCount = this.board.length;
+        for (let i = 0; i < colsCount; i++) {
+            let col = this.board[i];
+            for (let j = 0, endIndex = col.length - 3; j <= endIndex; j++) {
+                let c1 = col[j];
+                let c2 = col[j + 1];
+                let c3 = col[j + 2];
+
+                if (c1 && c2 && c3) {
+                    if (c1.frame.name !== 0 && c2.frame.name !== 0 && c3.frame.name === 0) return true;
+                    if (c1.frame.name === 0 && c2.frame.name !== 0 && c3.frame.name !== 0) return true;
+                }
+            }
+        }
+
+        var rowsCount = this.board[0].length;
+        for (let i = 0, len = colsCount - 3; i <= len; i++) {
+            let r1 = this.board[i];
+            let r2 = this.board[i + 1];
+            let r3 = this.board[i + 2];
+            for (let j = 0; j < rowsCount; j++) {
+                let c1 = r1[j];
+                let c2 = r2[j];
+                let c3 = r3[j];
+
+                if (c1 && c2 && c3) {
+                    if (c1.frame.name !== 0 && c2.frame.name !== 0 && c3.frame.name === 0) return true;
+                    if (c1.frame.name === 0 && c2.frame.name !== 0 && c3.frame.name !== 0) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    remainingPegs() {
+        var pegs = 0;
+        for (let i = 0, len = this.board.length; i < len; i++) {
+            let col = this.board[i];
+            for (let j = 0, cnt = col.length; j < cnt; j++) {
+                let cell = col[j];
+                if (cell && cell.frame.name !== 0) {
+                    pegs++
+                }
+            }
+        }
+        return pegs;
+    }
+
+    removePeg(tempPeg, selectedPeg, targetPeg, pegToRemove) {
+        tempPeg.setPosition(selectedPeg.x, selectedPeg.y);
+        tempPeg.targetPeg = targetPeg;
+        tempPeg.removePeg = pegToRemove;
+        tempPeg.visible = true;
+        var self = this;
+        this.pegTween = this.tweens.add({
+            targets: tempPeg,
+            x: targetPeg.x,
+            y: targetPeg.y,
+            duration: 200,
+            delay: 50,
+            onStart: function (tween) {
+                var sprite = tween.targets[0];
+                sprite.removePeg.setFrame(0);
+            },
+            onComplete: function (tween) {
+                var sprite = tween.targets[0];
+                sprite.targetPeg.setFrame(1);
+                sprite.visible = false;
+                if (!self.isAnyValidMove()) {
+                    let timedEvent = self.time.addEvent({
+                        delay: 3000,
+                        callbackScope: this,
+                        callback: function () {
+                            self.gameOver();
+                        }
+                    });
+                }
+            }
+        });
     }
 }
