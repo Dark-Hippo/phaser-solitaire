@@ -1,19 +1,22 @@
-LocalScaleManager.prototype = {
-    scaleSprite: function (sprite, availableSpaceWidth, availableSpaceHeight, padding, scaleMultiplier, isFullScale) {
+export class LocalScaleManager {
+    scaleSprite(sprite, availableSpaceWidth, availableSpaceHeight, padding, scaleMultiplier, isFullScale) {
         let scale = this.getSpriteScale(sprite.frame.width, sprite.frame.height, availableSpaceWidth, availableSpaceHeight, padding, isFullScale);
         sprite.setScale(scale * scaleMultiplier);
         return scale;
-    },
-    scaleSpriteTo: function (sprite, scale) {
+    }
+    
+    scaleSpriteTo (sprite, scale) {
         sprite.setScale(scale);
-    },
-    scaleText: function (sprite, availableSpaceWidth, availableSpaceHeight, padding, scaleMultiplier, isFullScale) {
+    }
+
+    scaleText (sprite, availableSpaceWidth, availableSpaceHeight, padding, scaleMultiplier, isFullScale) {
         let originalWidth = sprite.width;
         let originalHeight = sprite.height;
         let scale = this.getSpriteScale(originalWidth, originalHeight, availableSpaceWidth, availableSpaceHeight, padding, isFullScale);
         sprite.setScale(scale * scaleMultiplier);
-    },
-    getSpriteScale: function (spriteWidth, spriteHeight, availableSpaceWidth, availableSpaceHeight, minPadding, isFullScale) {
+    }
+    
+    getSpriteScale (spriteWidth, spriteHeight, availableSpaceWidth, availableSpaceHeight, minPadding, isFullScale) {
         let ratio = 1;
         let currentDevicePixelRatio = window.devicePixelRatio;
         // Sprite needs to fit in either width or height
@@ -28,5 +31,3 @@ LocalScaleManager.prototype = {
         return ratio * currentDevicePixelRatio;
     }
 };
-
-let localScaleManager = new LocalScaleManager;
